@@ -62,22 +62,33 @@ open('list.json', 'w').write(data[0].to_json())
 website_list = data[0].iloc[:,0]
 
 # Extract domains from website URLs
-domain_list = []
+new_domain_list = []
 for website in website_list:
   # Use regular expression to extract domain from URL
   filter = re.search(r"(.*://)?([^/:]+\.)?([^/:]+\.[a-z][a-z0-9]+)(/)?", website.lower())
   if filter and filter.group(3):
     domain = filter.group(3)
-    domain_list.append(domain)
+    new_domain_list.append(domain)
 
 # Remove duplicate domains using numpy
-domain_list = np.unique(np.array(domain_list))
+new_domain_list = np.unique(np.array(new_domain_list)).tolist()
 
-# Write the list of domains before filtering to a file named raw_domains
-open("raw_domains", "w").write('\n'.join(domain_list))
+# Load previouse not filtered domain list
+old_domain_list = open("raw_domains", "r").read().split('\n')
 
-# Filter domains to only include those that exist
-domain_list = [domain for domain in domain_list if is_domain_exists(domain)]
+# Write the list of new domains before filtering to a file named raw_domains
+open("raw_domains", "w").write('\n'.join(new_domain_list))
 
-# Write the list of domains to a file named domains
+# load previouse domain list
+domain_list = open("domains", "r").read().split('\n')
+
+# Filter new domains to only include those that exist
+for domain in new_domain_list:
+    if domain not in old_domain_list and is_domain_exists(domain):
+      domain_list.append(domain)
+
+# Sort list
+domain_list.sort()
+
+# Write the filtered list of domains to a file named domains
 open("domains", "w").write('\n'.join(domain_list))
