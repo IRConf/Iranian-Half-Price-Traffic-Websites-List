@@ -1,21 +1,39 @@
-# import necessary modules
 import requests
 import sys
 import re
-import numpy as np
+import json
 import pandas as pd
 import socket
+from netaddr import IPNetwork, IPAddress
+from multiprocessing import Manager, Pool
+import functools
+
+# Create a multiprocessing manager and pool for parallel processing
+manager = Manager()
+pool = Pool()
 
 # set default timeout for socket requests to 1 second
 socket.setdefaulttimeout(1)
 
-# define a function to check if a domain exists
-def is_domain_exists(domain):
+# Define a function to check if a domain is valid based on its IP address on list
+def is_domain_valid(domain, ipnets):
   try:
-    ips = socket.gethostbyname(domain)  # get IP address of the domain
-    return True  # return True if domain exists
+    ip = IPAddress(socket.gethostbyname(domain))  # get IP address of the domain
+    for ipnet in ipnets:
+      if ip in IPNetwork(ipnet):
+        return True  # Return True if domain IP matches the IP range in the list
   except:
     return False  # return False if domain does not exist
+
+
+# Define a function to check if a domain is valid and add it to the domain list if it is
+def check_domain_worker(item, old_domain_list, domain_list):
+  domain, ipnets = item
+  # Check if the domain is not in the old domain list, not already in the domain list, and is valid
+  if domain not in old_domain_list and domain not in domain_list and is_domain_valid(domain, ipnets):
+    # Add the domain to the domain list
+    domain_list.append(domain)
+
 
 # create a requests session and set the proxy for HTTPS requests
 session = requests.Session()
@@ -58,36 +76,37 @@ data = pd.read_html(html.content)
 # Write the table to a JSON file named list.json
 open('list.json', 'w').write(data[0].to_json())
 
-# Select the first column of the first table that contains website urls
-website_list = data[0].iloc[:,0]
-
 # Extract domains from website URLs
-new_domain_list = []
-for website in website_list:
+new_domain_list = {}
+for website in data[0].iloc:
   # Use regular expression to extract domain from URL
-  filter = re.search(r"(.*://)?([^/:]+\.)?([^/:]+\.[a-z][a-z0-9]+)(/)?", website.lower())
+  filter = re.search(r"(.*://)?([^/:]+\.)?([^/:]+\.[a-z][a-z0-9]+)(/)?", website[0].lower())
   if filter and filter.group(3):
     domain = filter.group(3)
-    new_domain_list.append(domain)
+    # append ipnet to domain key
+    if domain not in new_domain_list:
+      new_domain_list[domain] = []
+    new_domain_list[domain].append(website[2]) 
 
-# Remove duplicate domains using numpy
-new_domain_list = np.unique(np.array(new_domain_list)).tolist()
+# Load previous not filtered domain list
+old_domain_list = json.load(open("old_domains", "r"))
 
-# Load previouse not filtered domain list
-old_domain_list = open("raw_domains", "r").read().split('\n')
+# Write the list of new domains before filtering to a file named old_domains
+json.dump(new_domain_list, open("old_domains", "w"))
 
-# Write the list of new domains before filtering to a file named raw_domains
-open("raw_domains", "w").write('\n'.join(new_domain_list))
-
-# load previouse domain list
+# Load previous domain list
 domain_list = open("domains", "r").read().split('\n')
 
-# Filter new domains to only include those that exist
-for domain in new_domain_list:
-    if domain not in old_domain_list and is_domain_exists(domain):
-      domain_list.append(domain)
+# Convert domain_list to a shared list so it can be safely accessed by multiple processes
+# Also convert old_domain_list to a shared list for consistency
+domain_list = manager.list(domain_list)
+old_domain_list = manager.list(old_domain_list)
 
-# Sort list
+# Map the check_domain_worker function to each item in the new_domain_list dictionary, passing in the shared old_domain_list
+# and domain_list as arguments to the function
+pool.map(functools.partial(check_domain_worker, old_domain_list=old_domain_list, domain_list=domain_list), new_domain_list.items())
+
+# Sort the domain list alphabetically
 domain_list.sort()
 
 # Write the filtered list of domains to a file named domains
