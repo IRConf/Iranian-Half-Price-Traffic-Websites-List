@@ -35,7 +35,7 @@ token = html[start_index:end_index]
 if not token or not session.cookies.get_dict()['__RequestVerificationToken']:
   sys.exit('Cannot access')
 
-# Send a POST request with data and headers to GetIPList endpoint to download the list
+# Send a POST request with data and headers to GetIPList endpoint to download eligible websites list
 html = session.post('https://eservices.ito.gov.ir/Page/GetIPList', 
                       headers = {
                           "Referer": "https://eservices.ito.gov.ir/page/iplist",
@@ -73,8 +73,11 @@ for website in website_list:
 # Remove duplicate domains using numpy
 domain_list = np.unique(np.array(domain_list))
 
+# Write the list of domains before filtering to a file named raw_domains
+open("raw_domains", "w").write('\n'.join(domain_list))
+
 # Filter domains to only include those that exist
-domain_list = [domain for domain in domain_list if is_domain_exists(domain)]
+# domain_list = [domain for domain in domain_list if is_domain_exists(domain)]
 
 # Write the list of domains to a file named domains
-open("domains", "w").write('\n'.join(domain_list))
+# open("domains", "w").write('\n'.join(domain_list))
