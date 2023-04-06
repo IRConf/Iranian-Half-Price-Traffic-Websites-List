@@ -77,7 +77,7 @@ domain_list = np.unique(np.array(domain_list))
 open("raw_domains", "w").write('\n'.join(domain_list))
 
 # Filter domains to only include those that exist
-# domain_list = [domain for domain in domain_list if is_domain_exists(domain)]
+domain_list = [domain for domain in domain_list if is_domain_exists(domain)]
 
 # Write the list of domains to a file named domains
-# open("domains", "w").write('\n'.join(domain_list))
+open("domains", "w").write('\n'.join(domain_list))
