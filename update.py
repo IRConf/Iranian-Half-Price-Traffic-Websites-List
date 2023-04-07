@@ -20,10 +20,10 @@ def is_domain_valid(domain, ipnets):
 
 
 # Define a function to check if a domain is valid and add it to the domain list if it is
-def check_domain_worker(item, old_domain_list, domain_list):
+def check_domain_worker(item, old_domain_dic, domain_list):
   domain, ipnets = item
   # Check if the domain is not in the old domain list, not already in the domain list, and is valid
-  if domain not in old_domain_list and domain not in domain_list and is_domain_valid(domain, ipnets):
+  if domain not in old_domain_dic and domain not in domain_list and is_domain_valid(domain, ipnets):
     # Add the domain to the domain list
     domain_list.append(domain)
 
@@ -74,41 +74,43 @@ if __name__ == "__main__":
   # Use pandas to extract data from HTML table 
   data = pd.read_html(html.content)
 
-  # Write the table to a JSON file named list.json
-  open('list.json', 'w').write(data[0].to_json())
-
   # Extract domains from website URLs
-  new_domain_list = {}
+  new_domain_dic = {}
   for website in data[0].iloc:
     # Use regular expression to extract domain from URL
     filter = re.search(r"(.*://)?([^/:]+\.)?([^/:]+\.[a-z][a-z0-9]+)(/)?", website[0].lower())
     if filter and filter.group(3):
       domain = filter.group(3)
       # append ipnet to domain key
-      if domain not in new_domain_list:
-        new_domain_list[domain] = []
-      new_domain_list[domain].append(website[2]) 
+      if domain not in new_domain_dic:
+        new_domain_dic[domain] = []
+      new_domain_dic[domain].append(website[2]) 
 
   # Load previous not filtered domain list
-  old_domain_list = json.load(open("old_domains", "r"))
+  old_domain_dic = json.load(open("list.json", "r"))
 
-  # Write the list of new domains before filtering to a file named old_domains
-  json.dump(new_domain_list, open("old_domains", "w"))
+  # Write the list of new domains and ipnets before filtering to a file named old_domains
+  json.dump(new_domain_dic, open("list.json", "w"))
 
+  # Write the list of new domains before filtering to a file named domains
+  new_domain_list =  list(new_domain_dic.keys())
+  new_domain_list.sort()
+  open("domains", "w").write('\n'.join(new_domain_list))
+  
   # Load previous domain list
-  domain_list = open("domains", "r").read().split('\n')
+  domain_list = open("filtered_domains", "r").read().split('\n')
 
   # Convert domain_list to a shared list so it can be safely accessed by multiple processes
-  # Also convert old_domain_list to a shared list for consistency
+  # Also convert new_domain_dic to a shared dic for consistency
   domain_list = manager.list(domain_list)
-  old_domain_list = manager.list(old_domain_list)
+  new_domain_dic = manager.dict(old_domain_dic)
 
-  # Map the check_domain_worker function to each item in the new_domain_list dictionary, passing in the shared old_domain_list
+  # Map the check_domain_worker function to each item in the new_domain_list dictionary, passing in the shared new_domain_dic
   # and domain_list as arguments to the function
-  pool.map(functools.partial(check_domain_worker, old_domain_list=old_domain_list, domain_list=domain_list), new_domain_list.items())
+  pool.map(functools.partial(check_domain_worker, old_domain_dic=old_domain_dic, domain_list=domain_list), new_domain_dic.items())
 
   # Sort the domain list alphabetically
   domain_list.sort()
 
   # Write the filtered list of domains to a file named domains
-  open("domains", "w").write('\n'.join(domain_list))
+  open("filtered_domains", "w").write('\n'.join(domain_list))
